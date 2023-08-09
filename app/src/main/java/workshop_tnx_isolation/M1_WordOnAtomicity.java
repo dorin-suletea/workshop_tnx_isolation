@@ -2,13 +2,12 @@ package workshop_tnx_isolation;
 
 
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 
 public class M1_WordOnAtomicity {
     private final DbConnector connector = new DbConnector();
 
-    private void createInitialSchema() {
+    private void createSchema() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("DROP TABLE IF EXISTS UserInventory;");
@@ -82,7 +81,7 @@ public class M1_WordOnAtomicity {
     private static void runNonAtomicCampaign(){
         System.out.println("Running camping");
         M1_WordOnAtomicity sc = new M1_WordOnAtomicity();
-        sc.createInitialSchema();
+        sc.createSchema();
         sc.printTable();
         sc.runGiveawayCampaign();
         sc.printTable();
@@ -91,7 +90,7 @@ public class M1_WordOnAtomicity {
     private static void runAtomicCampaign(){
         System.out.println("Running atomic camping");
         M1_WordOnAtomicity sc = new M1_WordOnAtomicity();
-        sc.createInitialSchema();
+        sc.createSchema();
         sc.printTable();
         sc.runGiveawayCampaignAtomically();
         sc.printTable();
