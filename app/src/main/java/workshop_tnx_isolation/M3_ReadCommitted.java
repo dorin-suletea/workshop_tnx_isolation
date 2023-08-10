@@ -82,6 +82,29 @@ public class M3_ReadCommitted {
         });
     }
 
+    private void simplifiedNonRepeatableReadExample(CountDownLatch latch) {
+        connector.run(conn -> {
+            try (Statement st = conn.createStatement()) {
+                st.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;");
+                st.execute("START TRANSACTION;");
+                ResultSet rs1 = st.executeQuery("SELECT username, gbCount from UserInventory");
+                while (rs1.next()) {
+                    System.out.println("Read 1: " + rs1.getString("username") + " | " + rs1.getInt("gbCount"));
+                }
+                st.execute("SELECT SLEEP(6);");
+                ResultSet rs2 = st.executeQuery("SELECT username, gbCount from UserInventory");
+                while (rs2.next()) {
+                    System.out.println("Read 2: " + rs2.getString("username") + " | " + rs2.getInt("gbCount"));
+                }
+
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            latch.countDown();
+            return "";
+        });
+    }
+
     private void printTable() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
@@ -114,6 +137,7 @@ public class M3_ReadCommitted {
      * * * *  But the gbCount is now 100, as it was set by TnxB.
      * *
      * * This is called a 'Non-repeatable read' as a transaction can read the same row twice and receive different values each time.
+     * * We will need a 'REPEATABLE READ' isolation level to handle this case. See M4
      */
     public static void main(String[] args) throws InterruptedException {
         M3_ReadCommitted sc = new M3_ReadCommitted();
@@ -123,8 +147,12 @@ public class M3_ReadCommitted {
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch latch = new CountDownLatch(2);
 
-        exec.execute(() -> sc.giveAwayForUsersWithZeroGoldBars(latch));
         exec.execute(() -> sc.dorinPurchases100GoldBars(latch));
+        exec.execute(() -> sc.giveAwayForUsersWithZeroGoldBars(latch));
+
+        // Run this instead of `exec.execute(() -> sc.giveAwayForUsersWithZeroGoldBars(latch));` to see a simplified showcase of anomaly
+        //exec.execute(() -> sc.simplifiedNonRepeatableReadExample(latch));
+
 
         latch.await();
         sc.printTable();
