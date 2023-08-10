@@ -98,6 +98,25 @@ public class M2_ReadUncommitted {
     }
 
     /**
+     * More on it in M3, but for now we just want to know that it indeed solves our anomaly.
+     */
+    private void taxTheRichWitReadCommitted(CountDownLatch latch) {
+        connector.run(conn -> {
+            try (Statement st = conn.createStatement()) {
+                st.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;");
+                st.execute("START TRANSACTION;");
+                st.execute("SELECT SLEEP(4);");
+                st.execute("INSERT INTO TaxReport SELECT username, paycheck>=100 FROM MonthlyPay");
+                st.execute("COMMIT;");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            latch.countDown();
+            return "";
+        });
+    }
+
+    /**
      * a) Starting a transaction in `READ UNCOMMITTED` mode means it can read data that is currently being dirtied by other transactions.
      * *
      * b) When executing our 'taxTheRich' transaction has no clue if 'giveDorinMoreMoney' will successfully COMMIT or ROLLBACK.
@@ -111,7 +130,6 @@ public class M2_ReadUncommitted {
      * * and you are willing to trade correctness for speed.
      * *
      * d) This is the absolute fastest way to run transactions, but the most incorrect one.
-     * * Notice how our transactions took around 8 seconds in total, but running them sequentially would need at least 12 sec.
      * * Postgresql (the golden standard for DB correctness) does not even support this mode
      * * https://www.postgresql.org/docs/current/sql-set-transaction.html#:~:text=In%20PostgreSQL%20READ%20UNCOMMITTED%20is,a%20transaction%20has%20been%20executed.
      * *
@@ -125,18 +143,20 @@ public class M2_ReadUncommitted {
 
         // Run both transactions simultaneously and use the latch to keep the
         // application running until both of the threads finished.
-        long timeBegin = System.nanoTime();
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch latch = new CountDownLatch(2);
 
         exec.execute(() -> sc.giveDorinMoreMoney(latch));
+
         exec.execute(() -> sc.taxTheRich(latch));
+        // exec.execute(() -> sc.taxTheRichWitReadCommitted(latch));
+        // Running the second transaction in READ COMMITTED isolation mode solves our anomaly.
 
         latch.await();
-        long timeEnd = System.nanoTime();
         sc.printTable();
-
-        System.out.println("Total time seconds :" + TimeUnit.NANOSECONDS.toSeconds(timeEnd - timeBegin));
         exec.shutdown();
     }
+
+
+
 }
