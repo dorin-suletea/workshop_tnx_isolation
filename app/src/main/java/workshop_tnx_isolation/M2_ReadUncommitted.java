@@ -5,7 +5,6 @@ import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class M2_ReadUncommitted {
     private final DbConnector connector = new DbConnector();
