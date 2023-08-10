@@ -99,6 +99,22 @@ public class M3_ReadCommitted {
         });
     }
 
+    /**
+     * In READ COMMITTED isolation level each read statement will lock the row preventing any other transaction from changing it.
+     * However, it uses an eager lock releasing scheme. Once the read statement is done, the lock is released
+     * and any other transaction can change it at will.
+     * *
+     * What actually happens in this example:
+     * TnxA = giveAwayForUsersWithZeroGoldBars
+     * TnxB = dorinPurchases100GoldBars
+     * *
+     * TnxA : Runs the initial select acquiring the locks for the row. TnxB is blocked and waiting for the locks to be available.
+     * TnxA : Finishes the initial select and eagerly releases the locks. TnxB goes ahead, sets the value to 100 and commits.
+     * TnxA : Based on the first select, does the update (which is effectively: int a = read(a); set(a+10);
+     * * * *  But the gbCount is now 100, as it was set by TnxB.
+     * *
+     * * This is called a 'Non-repeatable read' as a transaction can read the same row twice and receive different values each time.
+     */
     public static void main(String[] args) throws InterruptedException {
         M3_ReadCommitted sc = new M3_ReadCommitted();
         sc.createSchema();
