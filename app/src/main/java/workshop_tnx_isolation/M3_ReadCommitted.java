@@ -1,5 +1,7 @@
 package workshop_tnx_isolation;
 
+import com.google.common.base.Strings;
+
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -17,9 +19,16 @@ public class M3_ReadCommitted {
     private void createSchema() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("DROP TABLE IF EXISTS UserInventory");
-                st.execute("CREATE TABLE UserInventory(username varchar(255) PRIMARY KEY, gbCount int)");
-                st.execute("INSERT into UserInventory VALUES ('Dorin', 0);");
+                st.execute("DROP TABLE IF EXISTS User");
+                st.execute("DROP TABLE IF EXISTS Leaderboards");
+                st.execute("CREATE TABLE User(username VARCHAR(255) PRIMARY KEY, livesInEurope BOOLEAN, points INT)");
+                st.execute("CREATE TABLE Leaderboards(leaderboardName varchar(255) PRIMARY KEY, topScorers VARCHAR(255))");
+
+                st.execute("INSERT INTO User VALUES ('Dorin', true, 100)");
+                st.execute("INSERT INTO User VALUES ('Porin', true, 5)");
+                st.execute("INSERT INTO User VALUES ('Xorin', false, 100)");
+                st.execute("INSERT INTO User VALUES ('Borin', false, 100)");
+
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -27,12 +36,12 @@ public class M3_ReadCommitted {
         });
     }
 
-    private void dorinPurchases100GoldBars(CountDownLatch latch) {
+    private void relocateDorin(CountDownLatch latch) {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("START TRANSACTION;");
-                st.execute("UPDATE UserInventory SET gbCount = 100 WHERE username='Dorin';");
-                st.execute("SELECT SLEEP(2);");
+                st.execute("SELECT SLEEP(3);");
+                st.execute("UPDATE User SET livesInEurope = false WHERE username='Dorin';");
                 st.execute("COMMIT;");
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -41,38 +50,34 @@ public class M3_ReadCommitted {
             return "";
         });
     }
+
 
     /**
-     * Let's bet : how much GB dorin has when both 'purchase100GoldBars' and 'giveAwayForUsersWithZeroGoldBars'
-     * transactions finish executing. Note that 'purchase100GoldBars' sets the amount to 100, it does not increment by 100.
-     * * 10?
-     * * 100?
-     * * 110?
+     * Generate 2 leaderboards (EU or NON_EU) depending on the user `livesInEurope` or not.
      */
-    private void giveAwayForUsersWithZeroGoldBars(CountDownLatch latch) {
+    private void generateLeaderboards(CountDownLatch latch, String isolationLevel) {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;");
+                st.execute("SET TRANSACTION ISOLATION LEVEL " + isolationLevel);
                 st.execute("START TRANSACTION;");
 
-                // Collect a list of users with 0 GB in their account
-                ResultSet rs = st.executeQuery("SELECT username, gbCount from UserInventory");
-                List<String> usersEligibleForGiveaway = new ArrayList<>();
+                // Create the leader ranking for europe
+                List<String> europeTopScorers = new ArrayList<>();
+                ResultSet rs = st.executeQuery("SELECT username FROM User WHERE livesInEurope=true AND points >= 100");
                 while (rs.next()) {
-                    String userName = rs.getString("username");
-                    Integer gbCount = rs.getInt("gbCount");
-                    if (gbCount == 0) {
-                        usersEligibleForGiveaway.add(userName);
-                        System.out.println("Eligible user found: " + userName + " | " + gbCount);
-                    }
-
+                    europeTopScorers.add(rs.getString("username"));
                 }
+                st.execute("INSERT INTO Leaderboards VALUES('EU','" + europeTopScorers + "')");
                 st.execute("SELECT SLEEP(6);");
 
-                // Give each one of them 10 GB
-                for (String username : usersEligibleForGiveaway) {
-                    st.execute("UPDATE UserInventory SET gbCount = gbCount + 10 WHERE username='" + username + "';");
+                // Create the leader ranking for non-european countries
+                List<String> worldTopScorers = new ArrayList<>();
+                ResultSet rs2 = st.executeQuery("SELECT username FROM User WHERE livesInEurope=false AND points >= 100");
+                while (rs2.next()) {
+                    worldTopScorers.add(rs2.getString("username"));
                 }
+                st.execute("INSERT INTO Leaderboards VALUES('NON_EU','" + worldTopScorers + "')");
+
                 st.execute("COMMIT;");
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -82,37 +87,34 @@ public class M3_ReadCommitted {
         });
     }
 
-    private void simplifiedNonRepeatableReadExample(CountDownLatch latch) {
+    private void printLeaderboardsTable() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;");
-                st.execute("START TRANSACTION;");
-                ResultSet rs1 = st.executeQuery("SELECT username, gbCount from UserInventory");
-                while (rs1.next()) {
-                    System.out.println("Read 1: " + rs1.getString("username") + " | " + rs1.getInt("gbCount"));
+                ResultSet rs = st.executeQuery("SELECT * FROM Leaderboards;");
+                System.out.println("Leaderboards============");
+                while (rs.next()) {
+                    String leaderboardName = Strings.padEnd(rs.getString("leaderboardName"), 6, ' ');
+                    String topScorers = rs.getString("topScorers");
+                    System.out.println(leaderboardName + " | " + topScorers);
                 }
-                st.execute("SELECT SLEEP(6);");
-                ResultSet rs2 = st.executeQuery("SELECT username, gbCount from UserInventory");
-                while (rs2.next()) {
-                    System.out.println("Read 2: " + rs2.getString("username") + " | " + rs2.getInt("gbCount"));
-                }
-
+                System.out.println("========================");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            latch.countDown();
             return "";
         });
     }
 
-    private void printTable() {
+    private void printUsersTable() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                ResultSet rs = st.executeQuery("SELECT * FROM UserInventory;");
-                System.out.println("========================");
+                ResultSet rs = st.executeQuery("SELECT * FROM User;");
+                System.out.println("Users==================");
                 while (rs.next()) {
-                    String ret = rs.getString("username") + " | " + rs.getInt("gbCount");
-                    System.out.println(ret);
+                    String user = rs.getString("username");
+                    boolean livesInEurope = rs.getBoolean("livesInEurope");
+                    int points = rs.getInt("points");
+                    System.out.println(user + " | " + livesInEurope + " | " + points);
                 }
                 System.out.println("========================");
             } catch (Exception e) {
@@ -124,38 +126,37 @@ public class M3_ReadCommitted {
 
     /**
      * In READ COMMITTED isolation level each read statement will lock the row preventing any other transaction from changing it.
-     * However, it uses an eager lock releasing scheme. Once the read statement is done, the lock is released
-     * and any other transaction can change it at will.
+     * However, it uses an eager lock releasing scheme. Once a SELECT statement is complete, the locks are released and other transactions
+     * can change the row as they please.
+     *
+     * What happens here:
+     * `generateLeaderboards` transaction does the initial select for EU based users.
+     * `moveDorin` transaction waits for the read to finish before it can change it's record.
+     * `generateLeaderboards` finishes the first select, `moveDorin` has the lock now, it changes the record and commits.
      * *
-     * What actually happens in this example:
-     * TnxA = giveAwayForUsersWithZeroGoldBars
-     * TnxB = dorinPurchases100GoldBars
+     * `generateLeaderboards` starts the second select, but now it sees "Dorin" was moved out of europe and ads it to the NON_EU leaderboard as well.
      * *
-     * TnxA : Runs the initial select acquiring the locks for the row. TnxB is blocked and waiting for the locks to be available.
-     * TnxA : Finishes the initial select and eagerly releases the locks. TnxB goes ahead, sets the value to 100 and commits.
-     * TnxA : Based on the first select, does the update (which is effectively: int a = read(a); set(a+10);
-     * * * *  But the gbCount is now 100, as it was set by TnxB.
-     * *
-     * * This is called a 'Non-repeatable read' as a transaction can read the same row twice and receive different values each time.
-     * * We will need a 'REPEATABLE READ' isolation level to handle this case. See M4
+     * This is called a 'Non-repeatable read' or 'fuzzy read'.
+     * Under READ COMMITTED isolation mode, 2 subsequent reads on the same row within the same transaction can return different values.
+     * The more restrictive "REPEATABLE READ" mode should solve this anomaly. See M4
      */
     public static void main(String[] args) throws InterruptedException {
         M3_ReadCommitted sc = new M3_ReadCommitted();
         sc.createSchema();
-        sc.printTable();
+        sc.printUsersTable();
 
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch latch = new CountDownLatch(2);
 
-        exec.execute(() -> sc.dorinPurchases100GoldBars(latch));
-        exec.execute(() -> sc.giveAwayForUsersWithZeroGoldBars(latch));
+        exec.execute(() -> sc.relocateDorin(latch));
+        exec.execute(() -> sc.generateLeaderboards(latch,"READ COMMITTED"));
 
-        // Run this instead of `exec.execute(() -> sc.giveAwayForUsersWithZeroGoldBars(latch));` to see a simplified showcase of anomaly
-        //exec.execute(() -> sc.simplifiedNonRepeatableReadExample(latch));
-
+        // Running the same transaction with a higher isolation level solves our problem
+        //exec.execute(() -> sc.generateLeaderboards(latch,"REPEATABLE READ"));
 
         latch.await();
-        sc.printTable();
+        sc.printUsersTable();
+        sc.printLeaderboardsTable();
         exec.shutdown();
     }
 

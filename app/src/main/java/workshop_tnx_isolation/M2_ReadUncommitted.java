@@ -1,5 +1,7 @@
 package workshop_tnx_isolation;
 
+import com.google.common.base.Strings;
+
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
@@ -27,25 +29,23 @@ public class M2_ReadUncommitted {
         });
     }
 
-    private String padUserNames(String username) {
-        return (username + "                       ").substring(0, 15);
-    }
-
     private void printTable() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 System.out.println("MonthlyPay==============");
                 ResultSet rs = st.executeQuery("SELECT * FROM MonthlyPay;");
                 while (rs.next()) {
-                    String ret = padUserNames(rs.getString("username")) + " | " + rs.getInt("paycheck");
-                    System.out.println(ret);
+                    String userName = Strings.padEnd(rs.getString("username"), 15, ' ');
+                    Integer paycheck = rs.getInt("paycheck");
+                    System.out.println(userName + " | " + paycheck);
                 }
                 rs.close();
                 System.out.println("TaxReport===============");
                 ResultSet rs2 = st.executeQuery("SELECT * FROM TaxReport;");
                 while (rs2.next()) {
-                    String ret = padUserNames(rs2.getString("username")) + " | " + rs2.getInt("isRich");
-                    System.out.println(ret);
+                    String userName = Strings.padEnd(rs2.getString("username"), 15, ' ');
+                    Boolean isRich = rs.getBoolean("isRich");
+                    System.out.println(userName + " | " + isRich);
                 }
                 rs2.close();
                 System.out.println("========================");
@@ -155,7 +155,6 @@ public class M2_ReadUncommitted {
         sc.printTable();
         exec.shutdown();
     }
-
 
 
 }
