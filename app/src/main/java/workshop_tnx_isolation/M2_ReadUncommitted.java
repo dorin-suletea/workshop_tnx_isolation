@@ -1,13 +1,14 @@
 package workshop_tnx_isolation;
 
-import com.google.common.base.Strings;
-
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Can see uncommitted data from other transactions.
+ **/
 public class M2_ReadUncommitted {
     private final DbConnector connector = new DbConnector();
 
@@ -46,7 +47,9 @@ public class M2_ReadUncommitted {
 
     /**
      * Insert into tax report everybody that is considered rich (paycheck>=100)
-     * <p>
+     **/
+
+    /**
      * (For connoisseurs)
      * In case you are wandering why I used 2 tables here :
      * READ UNCOMMITTED makes readers to not request shared locks (reads).
@@ -114,7 +117,7 @@ public class M2_ReadUncommitted {
      * Using a higher level isolation mode like 'READ COMMITTED' solves this problem.
      * READ COMMITTED does exactly what is sounds it will. The transaction running in this mode can
      * see only mutations that were committed.
-     *
+     * <p>
      * The exact way of how this is implemented depends on the database system.
      */
     public static void main(String[] args) throws InterruptedException {

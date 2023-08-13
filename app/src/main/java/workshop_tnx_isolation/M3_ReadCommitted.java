@@ -87,36 +87,17 @@ public class M3_ReadCommitted {
         });
     }
 
-    private void printLeaderboardsTable() {
+    private void printTables() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 ResultSet rs = st.executeQuery("SELECT * FROM Leaderboards;");
-                System.out.println("Leaderboards============");
-                while (rs.next()) {
-                    String leaderboardName = Strings.padEnd(rs.getString("leaderboardName"), 6, ' ');
-                    String topScorers = rs.getString("topScorers");
-                    System.out.println(leaderboardName + " | " + topScorers);
-                }
-                System.out.println("========================");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            return "";
-        });
-    }
+                System.out.println(Util.resultSetToString("Leaderboards", rs, "leaderboardName", "topScorers"));
+                rs.close();
 
-    private void printUsersTable() {
-        connector.run(conn -> {
-            try (Statement st = conn.createStatement()) {
-                ResultSet rs = st.executeQuery("SELECT * FROM User;");
-                System.out.println("Users==================");
-                while (rs.next()) {
-                    String user = rs.getString("username");
-                    boolean livesInEurope = rs.getBoolean("livesInEurope");
-                    int points = rs.getInt("points");
-                    System.out.println(user + " | " + livesInEurope + " | " + points);
-                }
-                System.out.println("========================");
+                ResultSet rs2 = st.executeQuery("SELECT * FROM User;");
+                System.out.println(Util.resultSetToString("User", rs2, "username", "livesInEurope", "points"));
+                rs2.close();
+
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -128,35 +109,50 @@ public class M3_ReadCommitted {
      * In READ COMMITTED isolation level each read statement will lock the row preventing any other transaction from changing it.
      * However, it uses an eager lock releasing scheme. Once a SELECT statement is complete, the locks are released and other transactions
      * can change the row as they please.
-     *
+     */
+
+
+    /**
      * What happens here:
-     * `generateLeaderboards` transaction does the initial select for EU based users.
-     * `moveDorin` transaction waits for the read to finish before it can change it's record.
-     * `generateLeaderboards` finishes the first select, `moveDorin` has the lock now, it changes the record and commits.
-     * *
-     * `generateLeaderboards` starts the second select, but now it sees "Dorin" was moved out of europe and ads it to the NON_EU leaderboard as well.
-     * *
-     * This is called a 'Non-repeatable read' or 'fuzzy read'.
-     * Under READ COMMITTED isolation mode, 2 subsequent reads on the same row within the same transaction can return different values.
-     * The more restrictive "REPEATABLE READ" mode should solve this anomaly. See M4
+     * 1) `generateLeaderboards` transaction does the initial select for EU based users.
+     * 2) `moveDorin` transaction waits for the read to finish before it can change it's record.
+     * 3) `generateLeaderboards` finishes the first select (which builds the EU leaderboard), `moveDorin` thx has the lock now, it changes the record and commits.
+     * 4) `generateLeaderboards` starts the second select, but now it sees "Dorin" is not in europe and adds it NON_EU leaderboard as well.
+     **/
+
+    /**
+     * This is called a "Non-repeatable read" or "fuzzy read".
+     * Under READ COMMITTED isolation mode, 2 reads on the same row from the same transaction can return different values.
+     */
+
+    /**
+     * Setting the mode to 'REPEATABLE READ' solves this anomaly.
+     * A transaction in repeatable read mode will see the state of the DB as of the time when the transaction started.
+     * It might get 'stale data' but all the operations will run with the same staleness.
+     *
+     * This behavior is most similar to how iterators work on a ConcurrentHashMap in java. (and probably other languages as well)
      */
     public static void main(String[] args) throws InterruptedException {
         M3_ReadCommitted sc = new M3_ReadCommitted();
         sc.createSchema();
-        sc.printUsersTable();
+        sc.printTables();
 
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch latch = new CountDownLatch(2);
 
         exec.execute(() -> sc.relocateDorin(latch));
-        exec.execute(() -> sc.generateLeaderboards(latch,"READ COMMITTED"));
+        exec.execute(() -> sc.generateLeaderboards(latch, "READ COMMITTED"));
 
-        // Running the same transaction with a higher isolation level solves our problem
+        // Running the same transaction with a higher isolation level (REPEATABLE READ) solves our problem.
+        // Dorin goes to the EU leaderboard because at the exact point-in-time where `generateLeaderboards` started
+        // `relocateDorin` did not commit yet; So `generateLeaderboards` sees an older snapshot of the data where dorin
+        // is still in europe. Which is actually correct behavior in most cases. This is why REPEATABLE READ is the default
+        // isolation level in MySql.
+
         //exec.execute(() -> sc.generateLeaderboards(latch,"REPEATABLE READ"));
 
         latch.await();
-        sc.printUsersTable();
-        sc.printLeaderboardsTable();
+        sc.printTables();
         exec.shutdown();
     }
 
