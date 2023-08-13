@@ -29,33 +29,6 @@ public class M2_ReadUncommitted {
         });
     }
 
-    private void printTable() {
-        connector.run(conn -> {
-            try (Statement st = conn.createStatement()) {
-                System.out.println("MonthlyPay==============");
-                ResultSet rs = st.executeQuery("SELECT * FROM MonthlyPay;");
-                while (rs.next()) {
-                    String userName = Strings.padEnd(rs.getString("username"), 15, ' ');
-                    Integer paycheck = rs.getInt("paycheck");
-                    System.out.println(userName + " | " + paycheck);
-                }
-                rs.close();
-                System.out.println("TaxReport===============");
-                ResultSet rs2 = st.executeQuery("SELECT * FROM TaxReport;");
-                while (rs2.next()) {
-                    String userName = Strings.padEnd(rs2.getString("username"), 15, ' ');
-                    Boolean isRich = rs.getBoolean("isRich");
-                    System.out.println(userName + " | " + isRich);
-                }
-                rs2.close();
-                System.out.println("========================");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            return "";
-        });
-    }
-
     private void giveDorinMoreMoney(CountDownLatch latch) {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
@@ -72,6 +45,8 @@ public class M2_ReadUncommitted {
     }
 
     /**
+     * Insert into tax report everybody that is considered rich (paycheck>=100)
+     * <p>
      * (For connoisseurs)
      * In case you are wandering why I used 2 tables here :
      * READ UNCOMMITTED makes readers to not request shared locks (reads).
@@ -80,10 +55,10 @@ public class M2_ReadUncommitted {
      * example as 'taxTheRich' transaction would have had to wait for 'giveDorinMoreMoney' transaction to finish
      * before it can update the row, and at that time 'giveDorinMoreMoney' transaction already rolled back.
      */
-    private void taxTheRich(CountDownLatch latch) {
+    private void taxTheRich(CountDownLatch latch, String isolationLevel) {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;");
+                st.execute("SET TRANSACTION ISOLATION LEVEL " + isolationLevel);
                 st.execute("START TRANSACTION;");
                 st.execute("SELECT SLEEP(4);");
                 st.execute("INSERT INTO TaxReport SELECT username, paycheck>=100 FROM MonthlyPay");
@@ -96,63 +71,68 @@ public class M2_ReadUncommitted {
         });
     }
 
+    private void printTables() {
+        connector.run(conn -> {
+            try (Statement st = conn.createStatement()) {
+                ResultSet rs = st.executeQuery("SELECT * FROM MonthlyPay;");
+                System.out.println(Util.resultSetToString("MonthlyPay", rs, "username", "paycheck"));
+                rs.close();
+
+                ResultSet rs2 = st.executeQuery("SELECT * FROM TaxReport;");
+                System.out.println(Util.resultSetToString("TaxReport", rs2, "username", "isRich"));
+                rs2.close();
+
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return "";
+        });
+    }
+
     /**
-     * More on it in M3, but for now we just want to know that it indeed solves our anomaly.
+     * Starting a transaction in 'READ UNCOMMITTED' mode means it can read data that is currently being dirtied by other transactions.
+     * The 'taxTheRich' tnx has no clue if 'giveDorinMoreMoney' will successfully COMMIT or ROLLBACK.
+     * But by using 'READ UNCOMMITTED' mode it declares : "I don't want to wait for any locks, id rather see dirty data".
+     **/
+
+    /**
+     * What happens here:
+     * 1) 'giveDorinMoreMoney' starts and sets the field to 100
+     * 2) 'taxTheRich' starts, sees the new value (100) and acts on it.
+     * 3) 'giveDorinMoreMoney' rolls back, but 'taxTheRich' already acted on the incorrect data.
+     **/
+
+    /**
+     * This behavior is called "DIRTY READS"
+     * and is most similar to the concurrency bugs in classical programming where somebody forgot to use a lock.
+     * This is the absolute fastest way to run transactions, but the most incorrect one.
+     * Postgresql (the golden standard for DB correctness) does not even support this mode
+     * https://www.postgresql.org/docs/current/sql-set-transaction.html#:~:text=In%20PostgreSQL%20READ%20UNCOMMITTED%20is,a%20transaction%20has%20been%20executed.
      */
-    private void taxTheRichWitReadCommitted(CountDownLatch latch) {
-        connector.run(conn -> {
-            try (Statement st = conn.createStatement()) {
-                st.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;");
-                st.execute("START TRANSACTION;");
-                st.execute("SELECT SLEEP(4);");
-                st.execute("INSERT INTO TaxReport SELECT username, paycheck>=100 FROM MonthlyPay");
-                st.execute("COMMIT;");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            latch.countDown();
-            return "";
-        });
-    }
 
     /**
-     * a) Starting a transaction in `READ UNCOMMITTED` mode means it can read data that is currently being dirtied by other transactions.
-     * *
-     * b) When executing our 'taxTheRich' transaction has no clue if 'giveDorinMoreMoney' will successfully COMMIT or ROLLBACK.
-     * * READ UNCOMMITTED means : "I don't want to wait for any locks, id rather see dirty data".
-     * * This is behavior is somewhat similar to a classical race condition where you see inconsistent values because you forgot to use  syncronized or any sort of mutex.
-     * * This anomaly is called "Dirty read"
-     * *
-     * c) When is this even useful?
-     * * It might be an option for read-only analytics on millions of records.
-     * * Where some  and some inconsistent data does not change your analysis significantly,
-     * * and you are willing to trade correctness for speed.
-     * *
-     * d) This is the absolute fastest way to run transactions, but the most incorrect one.
-     * * Postgresql (the golden standard for DB correctness) does not even support this mode
-     * * https://www.postgresql.org/docs/current/sql-set-transaction.html#:~:text=In%20PostgreSQL%20READ%20UNCOMMITTED%20is,a%20transaction%20has%20been%20executed.
-     * *
-     * e) This mode takes no locks, but exhibits "dirty read" anomalies.
-     * * Switching to READ COMMITTED mode solves this anomaly. See M3
+     * Using a higher level isolation mode like 'READ COMMITTED' solves this problem.
+     * READ COMMITTED does exactly what is sounds it will. The transaction running in this mode can
+     * see only mutations that were committed.
+     *
+     * The exact way of how this is implemented depends on the database system.
      */
     public static void main(String[] args) throws InterruptedException {
-        M2_ReadUncommitted sc = new M2_ReadUncommitted();
-        sc.createSchema();
-        sc.printTable();
-
-        // Run both transactions simultaneously and use the latch to keep the
-        // application running until both of the threads finished.
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch latch = new CountDownLatch(2);
 
-        exec.execute(() -> sc.giveDorinMoreMoney(latch));
+        M2_ReadUncommitted sc = new M2_ReadUncommitted();
+        sc.createSchema();
+        sc.printTables();
 
-        exec.execute(() -> sc.taxTheRich(latch));
-        // exec.execute(() -> sc.taxTheRichWitReadCommitted(latch));
-        // Running the second transaction in READ COMMITTED isolation mode solves our anomaly.
+        exec.execute(() -> sc.giveDorinMoreMoney(latch));
+        exec.execute(() -> sc.taxTheRich(latch, "READ UNCOMMITTED"));
+
+        // Running the same transaction in a higher isolation mode solves our problem.
+        //exec.execute(() -> sc.taxTheRich(latch, "READ COMMITTED"));
 
         latch.await();
-        sc.printTable();
+        sc.printTables();
         exec.shutdown();
     }
 
