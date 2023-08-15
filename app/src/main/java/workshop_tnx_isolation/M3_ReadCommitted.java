@@ -1,6 +1,5 @@
 package workshop_tnx_isolation;
 
-import com.google.common.base.Strings;
 
 import java.sql.ResultSet;
 import java.sql.Statement;
@@ -50,7 +49,6 @@ public class M3_ReadCommitted {
             return "";
         });
     }
-
 
     /**
      * Generate 2 leaderboards (EU or NON_EU) depending on the user `livesInEurope` or not.
@@ -111,7 +109,6 @@ public class M3_ReadCommitted {
      * can change the row as they please.
      */
 
-
     /**
      * What happens here:
      * 1) `generateLeaderboards` transaction does the initial select for EU based users.
@@ -132,6 +129,8 @@ public class M3_ReadCommitted {
      *
      * This behavior is most similar to how iterators work on a ConcurrentHashMap in java. (and probably other languages as well)
      */
+
+
     public static void main(String[] args) throws InterruptedException {
         M3_ReadCommitted sc = new M3_ReadCommitted();
         sc.createSchema();
@@ -156,4 +155,22 @@ public class M3_ReadCommitted {
         exec.shutdown();
     }
 
+    /**
+     * Important clarification on how REPEATABLE_READ is actually implemented by the DBMS:
+     * * *
+     * The REPEATABLE_READ can be implemented using actual locks. These types of implementations use a 'Two Phase Locking' protocol, (aka 2PL).
+     * AFAIK the first generations of databases systems used this approach. But obviously locking rows for the entire duration of a transaction
+     * is very bad for concurrency.
+     * Use-case : You need to take a database backup. To see a consistent DB state it uses REPEATABLE READ and acquire a lock for each row contained in the DB.
+     * Now all your UPDATE statements originating from other transactions are blocked until the backup transaction is finished.
+     * From what I understand this is one of the reasons legacy systems have "Nightly server maintenance downtimes".
+     * Their legacy DBMS can't take backups concurrently with user traffic.
+     * * *
+     * Unlike the systems of old DBMS from the Oracle, MySql, PostgreSql family or newer do not actually take locks.
+     * They use what is called "Snapshot isolation" implemented using 'Multi Versioning Concurrency Control' scheme aka MVCC.
+     * By using MVCC multiple timestamped versions of each row are preserved thus allowing long-running operations (for example analytics or backups)
+     * to be executed in parallel with user traffic.
+     * The use of MVCC has some fun implications for scenarios involving data mutation like clobbered updates or write skew,
+     * but this is outside of scope for this workshop. The hole goes deep.
+     */
 }
