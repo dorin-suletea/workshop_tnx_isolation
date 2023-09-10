@@ -36,31 +36,30 @@ public class M4_RepeatableRead {
 
                 // Get items to ship
                 List<String> items = new ArrayList<>();
-                ResultSet rs2 = st.executeQuery("SELECT item, price FROM PurchaseCart WHERE buyer='Dorin'");
-                while (rs2.next()) {
-                    items.add(rs2.getString("item") + "(" + rs2.getInt("price") + ")");
+                ResultSet rs = st.executeQuery("SELECT item, price FROM PurchaseCart WHERE buyer='Dorin'");
+                while (rs.next()) {
+                    items.add(rs.getString("item") + "(" + rs.getInt("price") + ")");
                 }
+                rs.close();
 
                 // Apply a flat tax on 1 Eur per item
+                // https://stackoverflow.com/questions/5444915/how-to-produce-phantom-read-in-repeatable-read-mysql
                 st.execute("UPDATE PurchaseCart SET price = price + 1, taxApplied=true WHERE buyer='Dorin';");
 
                 // Calculate totalPrice
                 Integer cartPrice = 0;
-                ResultSet rs = st.executeQuery("SELECT price  FROM PurchaseCart WHERE buyer='Dorin'");
-                while (rs.next()) {
-                    cartPrice += rs.getInt("price");
+                ResultSet rs2 = st.executeQuery("SELECT price  FROM PurchaseCart WHERE buyer='Dorin'");
+                while (rs2.next()) {
+                    cartPrice += rs2.getInt("price");
                 }
                 rs2.close();
+
                 System.out.println("==================================");
                 System.out.println("Shipping " + items + " at price " + cartPrice);
                 System.out.println("==================================");
-
-                // Print the table
                 ResultSet rs3 = st.executeQuery("SELECT * FROM PurchaseCart;");
                 System.out.println(Util.resultSetToString("PurchaseCart", rs3, "item", "buyer", "price", "taxApplied"));
                 rs3.close();
-
-
                 st.execute("COMMIT;");
             } catch (Exception e) {
                 throw new RuntimeException(e);
