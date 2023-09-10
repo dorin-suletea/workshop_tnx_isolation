@@ -15,14 +15,14 @@ public class M2_ReadUncommitted {
     private void createSchema() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("DROP TABLE IF EXISTS MonthlyPay;");
+                st.execute("DROP TABLE IF EXISTS MonthlyPay");
                 st.execute("DROP TABLE IF EXISTS TaxReport");
                 st.execute("CREATE TABLE MonthlyPay(username varchar(255) PRIMARY KEY, paycheck int)");
                 st.execute("CREATE TABLE TaxReport(username varchar(255) PRIMARY KEY, isRich boolean)"); //for taxation purposes
 
-                st.execute("INSERT into MonthlyPay VALUES ('RichieRich', 1000);");
-                st.execute("INSERT into MonthlyPay VALUES ('RichieNotRich', 20);");
-                st.execute("INSERT into MonthlyPay VALUES ('Dorin', 0);"); //Dorin is poor, Dorin deserves a raise.
+                st.execute("INSERT into MonthlyPay VALUES ('RichieRich', 1000)");
+                st.execute("INSERT into MonthlyPay VALUES ('RichieNotRich', 20)");
+                st.execute("INSERT into MonthlyPay VALUES ('Dorin', 0)"); //Dorin is poor, Dorin deserves a raise.
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -34,7 +34,7 @@ public class M2_ReadUncommitted {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("START TRANSACTION;");
-                st.execute("UPDATE MonthlyPay SET paycheck = paycheck + 100 WHERE username='Dorin';");
+                st.execute("UPDATE MonthlyPay SET paycheck = paycheck + 100 WHERE username='Dorin'");
                 st.execute("SELECT SLEEP(8);");
                 st.execute("ROLLBACK;"); // LOL
             } catch (Exception e) {
@@ -62,10 +62,10 @@ public class M2_ReadUncommitted {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("SET TRANSACTION ISOLATION LEVEL " + isolationLevel);
-                st.execute("START TRANSACTION;");
-                st.execute("SELECT SLEEP(4);");
+                st.execute("START TRANSACTION");
+                st.execute("SELECT SLEEP(4)");
                 st.execute("INSERT INTO TaxReport SELECT username, paycheck>=100 FROM MonthlyPay");
-                st.execute("COMMIT;");
+                st.execute("COMMIT");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -77,11 +77,11 @@ public class M2_ReadUncommitted {
     private void printTables() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                ResultSet rs = st.executeQuery("SELECT * FROM MonthlyPay;");
+                ResultSet rs = st.executeQuery("SELECT * FROM MonthlyPay");
                 System.out.println(Util.resultSetToString("MonthlyPay", rs, "username", "paycheck"));
                 rs.close();
 
-                ResultSet rs2 = st.executeQuery("SELECT * FROM TaxReport;");
+                ResultSet rs2 = st.executeQuery("SELECT * FROM TaxReport");
                 System.out.println(Util.resultSetToString("TaxReport", rs2, "username", "isRich"));
                 rs2.close();
 

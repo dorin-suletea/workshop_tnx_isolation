@@ -38,10 +38,10 @@ public class M3_ReadCommitted {
     private void relocateDorin(CountDownLatch latch) {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                st.execute("START TRANSACTION;");
-                st.execute("SELECT SLEEP(3);");
-                st.execute("UPDATE User SET livesInEurope = false WHERE username='Dorin';");
-                st.execute("COMMIT;");
+                st.execute("START TRANSACTION");
+                st.execute("SELECT SLEEP(3)");
+                st.execute("UPDATE User SET livesInEurope = false WHERE username='Dorin'");
+                st.execute("COMMIT");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -57,7 +57,7 @@ public class M3_ReadCommitted {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("SET TRANSACTION ISOLATION LEVEL " + isolationLevel);
-                st.execute("START TRANSACTION;");
+                st.execute("START TRANSACTION");
 
                 // Create the leader ranking for europe
                 List<String> europeTopScorers = new ArrayList<>();
@@ -66,7 +66,7 @@ public class M3_ReadCommitted {
                     europeTopScorers.add(rs.getString("username"));
                 }
                 st.execute("INSERT INTO Leaderboards VALUES('EU','" + europeTopScorers + "')");
-                st.execute("SELECT SLEEP(6);");
+                st.execute("SELECT SLEEP(6)");
 
                 // Create the leader ranking for non-european countries
                 List<String> worldTopScorers = new ArrayList<>();
@@ -88,7 +88,7 @@ public class M3_ReadCommitted {
     private void printTables() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                ResultSet rs = st.executeQuery("SELECT * FROM Leaderboards;");
+                ResultSet rs = st.executeQuery("SELECT * FROM Leaderboards");
                 System.out.println(Util.resultSetToString("Leaderboards", rs, "leaderboardName", "topScorers"));
                 rs.close();
 

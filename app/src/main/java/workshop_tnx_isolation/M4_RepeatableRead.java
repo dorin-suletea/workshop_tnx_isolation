@@ -42,13 +42,13 @@ public class M4_RepeatableRead {
                 }
                 rs.close();
 
-                // Apply a flat tax on 1 Eur per item
+                // Apply a flat tax on 1 eur per item
                 // https://stackoverflow.com/questions/5444915/how-to-produce-phantom-read-in-repeatable-read-mysql
-                st.execute("UPDATE PurchaseCart SET price = price + 1, taxApplied=true WHERE buyer='Dorin';");
+                st.execute("UPDATE PurchaseCart SET price = price + 1, taxApplied=true WHERE buyer='Dorin'");
 
                 // Calculate totalPrice
                 Integer cartPrice = 0;
-                ResultSet rs2 = st.executeQuery("SELECT price  FROM PurchaseCart WHERE buyer='Dorin'");
+                ResultSet rs2 = st.executeQuery("SELECT price FROM PurchaseCart WHERE buyer='Dorin'");
                 while (rs2.next()) {
                     cartPrice += rs2.getInt("price");
                 }
@@ -60,7 +60,7 @@ public class M4_RepeatableRead {
                 ResultSet rs3 = st.executeQuery("SELECT * FROM PurchaseCart;");
                 System.out.println(Util.resultSetToString("PurchaseCart", rs3, "item", "buyer", "price", "taxApplied"));
                 rs3.close();
-                st.execute("COMMIT;");
+                st.execute("COMMIT");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

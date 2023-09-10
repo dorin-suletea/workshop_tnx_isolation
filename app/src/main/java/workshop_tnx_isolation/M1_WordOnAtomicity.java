@@ -13,8 +13,8 @@ public class M1_WordOnAtomicity {
                 st.execute("DROP TABLE IF EXISTS UserInventory;");
                 st.execute("CREATE TABLE UserInventory(username varchar(255) PRIMARY KEY, gbCount int)");
 
-                st.execute("INSERT into UserInventory VALUES ('Margot Robbie', 214748370);");
-                st.execute("INSERT into UserInventory VALUES ('Julius Caesar', 2147483640);");
+                st.execute("INSERT into UserInventory VALUES ('Margot Robbie', 214748370)");
+                st.execute("INSERT into UserInventory VALUES ('Julius Caesar', 2147483640)");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -25,7 +25,7 @@ public class M1_WordOnAtomicity {
     private void printTable() {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
-                ResultSet rs = st.executeQuery("SELECT * FROM UserInventory;");
+                ResultSet rs = st.executeQuery("SELECT * FROM UserInventory");
                 System.out.println("========================");
                 while (rs.next()) {
                     String ret = rs.getString("username") + " | " + rs.getInt("gbCount");
@@ -68,8 +68,8 @@ public class M1_WordOnAtomicity {
         connector.run(conn -> {
             try (Statement st = conn.createStatement()) {
                 st.execute("START TRANSACTION;");
-                st.execute("UPDATE UserInventory SET gbCount = gbCount + 10 WHERE username='Margot Robbie';");
-                st.execute("UPDATE UserInventory SET gbCount = gbCount + 10 WHERE username='Julius Caesar';");
+                st.execute("UPDATE UserInventory SET gbCount = gbCount + 10 WHERE username='Margot Robbie'");
+                st.execute("UPDATE UserInventory SET gbCount = gbCount + 10 WHERE username='Julius Caesar'");
                 st.execute("COMMIT");
             } catch (Exception e) {
                 System.out.println(e);
