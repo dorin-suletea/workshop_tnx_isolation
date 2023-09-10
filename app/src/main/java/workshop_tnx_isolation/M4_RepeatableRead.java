@@ -41,6 +41,7 @@ public class M4_RepeatableRead {
                     items.add(rs.getString("item") + "(" + rs.getInt("price") + ")");
                 }
                 rs.close();
+                st.execute("SELECT SLEEP(3)");
 
                 // Apply a flat tax on 1 eur per item
                 // https://stackoverflow.com/questions/5444915/how-to-produce-phantom-read-in-repeatable-read-mysql
